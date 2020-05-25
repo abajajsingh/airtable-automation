@@ -4,6 +4,7 @@ var Airtable = require('airtable');
 var base = new Airtable({apiKey: process.env.AIRTABLE_API_KEY}).base(process.env.DB_KEY_TEST);
 const GoogleSpreadsheet = require('google-spreadsheet');
 const {promisify} = require('util');
+let samplearray = ["Nonprofit"];
 
 const creds  = require('./client_secret.json');
 
@@ -24,14 +25,19 @@ function addToAirtable(record) {
                 ],
                 "State": record.state,
                 "Address": record.address,
+                "Contact Number": record.contactnumber,
+                "Email": record.email,
+                "Help needed": record.helpneeded,
+                "Help offered": record.helpoffered,
                 "Logo": [
                     {
                       "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/SNice.svg/1200px-SNice.svg.png"
                     }
                 ],
+                "Program": formatString(record.program)
               }
             }
-        ], function(err, records) {
+            ], {typecast: true}, function(err, records) {
             if (err) {
               console.error(err);
               return;
@@ -45,8 +51,43 @@ function addToAirtable(record) {
             
 }
 
-
-
+function updateAirtable(airtableID, record) {
+    base('Programs & initiatives').update([
+        {
+            "id": airtableID,
+            "fields": {
+                "Initiative": record.initiativename,
+                "Website": record.website,
+                "Country": [
+                    "USA"
+                ],
+                "State": record.state,
+                "Address": record.address,
+                "Contact Number": record.contactnumber,
+                "Email": record.email,
+                "Help needed": record.helpneeded,
+                "Help offered": record.helpoffered,
+                "Logo": [
+                    {
+                      "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/SNice.svg/1200px-SNice.svg.png"
+                    }
+                ],
+                "Program": formatString(record.program)
+            }
+        }
+    ], {typecast: true}, function(err, records) {
+            if (err) {
+              console.error(err);
+              return;
+            }
+            records.forEach(function (record1) {
+              console.log(`Updated: ${record1.getId()}`);
+              printData(record);
+              console.log(`---------------------------`);
+            });
+    });
+            
+}
 
 async function accessSpreadsheet() {
     const doc = new GoogleSpreadsheet(process.env.SPREADSHEET_ID_TEST);
@@ -61,8 +102,29 @@ async function readSheetRows(sheet) {
     });
 
     rows.forEach(row=> {
-        addToAirtable(row);
+        base('Programs & initiatives').select({
+            maxRecords: 1,
+            filterByFormula: `{Initiative} = "${row.initiativename}"`
+        }).firstPage(function(err, records) {
+            if (err) { 
+                console.error(err); 
+                return; 
+            } 
+            records.forEach(function(record) {
+                updateAirtable(record.getId(), row);
+            });
+            if(!records.length) {
+                addToAirtable(row);
+            }
+        });
     });
+}
+
+function formatString(str) {
+    if(str.length == 1 && str[0].equals(" ")) {
+       str = [];
+    }
+    return str.split(", ");
 }
 
 accessSpreadsheet();
